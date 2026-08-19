@@ -69,6 +69,11 @@ ERPNext Business Logic
         ▼
 MariaDB
 ```
+## 🔗 Related Repository
+
+**Frontend Repository**
+
+👉 https://github.com/KLBramhananda/Enterprise-Healthcare-Commerce-Platform-F
 
 ---
 
@@ -83,9 +88,7 @@ Build a scalable enterprise healthcare commerce platform inspired by Tata 1mg wh
 🚧 Active Development
 
 ---
-🔗 **Frontend Repository:** https://github.com/KLBramhananda/Enterprise-Healthcare-Commerce-Platform-F
 
----
 
 ## 👨‍💻 Author
 
