@@ -1,33 +1,93 @@
-### KeeMeds Commerce
+# 🏥 Enterprise Healthcare Commerce Platform - Backend
 
-Enterprise Healthcare Commerce Platform inspired by Tata 1mg for KeeMeds Medical Stores.
+> Enterprise-grade healthcare commerce backend built with **Frappe Framework** and **ERPNext**.
 
-### Installation
+---
 
-You can install this app using the [bench](https://github.com/frappe/bench) CLI:
+## 🚀 Overview
 
-```bash
-cd $PATH_TO_YOUR_BENCH
-bench get-app $URL_OF_THIS_REPO --branch version-1
-bench install-app keemeds_commerce
+The backend serves as the business engine for the Enterprise Healthcare Commerce Platform.
+
+It manages healthcare commerce workflows, ERP integrations, inventory, orders, customers, prescriptions, payments, and business services while exposing secure REST APIs to the React frontend.
+
+---
+
+## 🛠 Tech Stack
+
+- 🐍 Python
+- ⚙️ Frappe Framework v16
+- 🏢 ERPNext v16
+- 🗄 MariaDB
+- 🔗 REST APIs
+- 🔒 Role-Based Access Control (RBAC)
+
+---
+
+## ✨ Core Responsibilities
+
+- 👥 Customer Management
+- 💊 Product Management
+- 📦 Inventory Management
+- 🛒 Cart & Checkout APIs
+- 📑 Order Management
+- 💳 Payment Processing
+- 🧾 Prescription Validation
+- 🏥 Healthcare Commerce Workflows
+- 📊 Reports & Analytics
+- 🔗 ERPNext Business Integration
+
+---
+
+## 📂 Project Structure
+
+```text
+keemeds_commerce/
+├── api/
+├── services/
+├── integrations/
+├── overrides/
+├── hooks.py
+└── modules/
 ```
 
-### Contributing
+---
 
-This app uses `pre-commit` for code formatting and linting. Please [install pre-commit](https://pre-commit.com/#installation) and enable it for this repository:
+## 🏗 Architecture
 
-```bash
-cd apps/keemeds_commerce
-pre-commit install
+```
+React Frontend
+        │
+        ▼
+REST APIs
+        │
+        ▼
+Application Services
+        │
+        ▼
+ERPNext Business Logic
+        │
+        ▼
+MariaDB
 ```
 
-Pre-commit is configured to use the following tools for checking and formatting your code:
+---
 
-- ruff
-- eslint
-- prettier
-- pyupgrade
+## 🎯 Project Goal
 
-### License
+Build a scalable enterprise healthcare commerce platform inspired by Tata 1mg while leveraging ERPNext as the core business engine.
 
-mit
+---
+
+## 📌 Status
+
+🚧 Active Development
+
+---
+
+## 👨‍💻 Author
+
+**Bramhananda K L**
+
+Full Stack Developer | ERPNext Developer | Solution Architect
+
+---
