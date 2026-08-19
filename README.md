@@ -3,8 +3,6 @@
 > Enterprise-grade healthcare commerce backend built with **Frappe Framework** and **ERPNext**.
 
 ---
-🔗 **Frontend Repository:** https://github.com/KLBramhananda/Enterprise-Healthcare-Commerce-Platform-F
----
 
 ## 🚀 Overview
 
@@ -83,6 +81,9 @@ Build a scalable enterprise healthcare commerce platform inspired by Tata 1mg wh
 ## 📌 Status
 
 🚧 Active Development
+
+---
+🔗 **Frontend Repository:** https://github.com/KLBramhananda/Enterprise-Healthcare-Commerce-Platform-F
 
 ---
 
