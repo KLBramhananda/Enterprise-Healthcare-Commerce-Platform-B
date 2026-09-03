@@ -1,0 +1,28 @@
+{
+  "duration_seconds": 0.619,
+  "exported_records": 1586,
+  "finished_at": "2026-09-03T05:45:53",
+  "generated_files": [
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/uoms/UOMs.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_groups/Item_Groups.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/brands/Brands.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/manufacturers/Manufacturers.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_attributes/Item_Attributes.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_attribute_values/Item_Attribute_Values.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/01_Item_Master_Medicines_001_100.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/02_Item_Master_Medicines_101_200.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/03_Item_Master_Medicines_201_300.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/prices/Item_Prices.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/stock/Opening_Stock.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/images/Item_Image_Mapping.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/reports/generation_summary.json",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/reports/generation_summary.xlsx",
+    "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/reports/generation_report.log"
+  ],
+  "generated_records": 1586,
+  "notes": [],
+  "skipped_records": 0,
+  "started_at": "2026-09-03T05:45:53",
+  "validation_errors": [],
+  "validation_warnings": []
+}

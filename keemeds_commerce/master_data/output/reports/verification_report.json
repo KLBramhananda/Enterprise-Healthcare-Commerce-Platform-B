@@ -1,0 +1,102 @@
+{
+  "duplicate_records": [],
+  "duration_seconds": 0.815,
+  "expected_files": 12,
+  "expected_records": 300,
+  "files": [
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/uoms/UOMs.xlsx",
+      "row_count": 19
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_groups/Item_Groups.xlsx",
+      "row_count": 3
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/brands/Brands.xlsx",
+      "row_count": 15
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/manufacturers/Manufacturers.xlsx",
+      "row_count": 15
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_attributes/Item_Attributes.xlsx",
+      "row_count": 4
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_attribute_values/Item_Attribute_Values.xlsx",
+      "row_count": 30
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/01_Item_Master_Medicines_001_100.xlsx",
+      "row_count": 100
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/02_Item_Master_Medicines_101_200.xlsx",
+      "row_count": 100
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/items/03_Item_Master_Medicines_201_300.xlsx",
+      "row_count": 100
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/prices/Item_Prices.xlsx",
+      "row_count": 600
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/stock/Opening_Stock.xlsx",
+      "row_count": 300
+    },
+    {
+      "errors": [],
+      "exists": true,
+      "has_required_columns": true,
+      "path": "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/images/Item_Image_Mapping.xlsx",
+      "row_count": 300
+    }
+  ],
+  "finished_at": "2026-09-03T05:45:47",
+  "found_files": 12,
+  "generated_records": 1586,
+  "invalid_references": [],
+  "missing_files": [],
+  "missing_images": [],
+  "missing_masters": [],
+  "notes": [],
+  "started_at": "2026-09-03T05:45:46",
+  "status": "PASSED"
+}
