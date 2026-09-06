@@ -34,6 +34,7 @@ from .importers import (
     ItemImporter,
     ManufacturerImporter,
     PriceImporter,
+    StockEntryExecutor,
     StockImporter,
     UOMImporter,
 )
@@ -109,13 +110,20 @@ def build_importers(
     yet configured, so adding a new importer class only requires registration.
     """
     executor = executor or build_executor(logger=logger)
+    stock_executor = StockEntryExecutor(config=config, logger=logger)
     importers: list[BaseImporter] = []
     for cls in IMPORTER_CLASSES:
         resolved = config.importer_config_for(cls.DEFAULT_CONFIG.key) or cls.DEFAULT_CONFIG
+        # Opening Stock cannot be Data Imported (SLE is a ledger), so it gets a
+        # dedicated executor that posts Stock Entry "Material Receipt" documents
+        # through the standard ERPNext inventory workflow.
+        cls_executor = (
+            stock_executor if resolved.key == StockImporter.DEFAULT_CONFIG.key else executor
+        )
         importers.append(
             cls(
                 config=resolved,
-                executor=executor,
+                executor=cls_executor,
                 export_config=config.export,
                 import_config=config.import_config,
                 logger=logger,

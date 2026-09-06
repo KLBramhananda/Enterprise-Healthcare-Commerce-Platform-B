@@ -42,6 +42,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+from .ai_image_generator import AIImageGenerator, build_ai_image_generator
 from .config import MasterDataConfig
 from .exporters import export_generation_result, export_records
 from .exporters.excel_exporter import ExportReport
@@ -50,6 +51,11 @@ from .generators import (
     BaseGenerator,
     build_enrichment_generators,
     build_generators,
+)
+from .image_manifest import ImageManifestWriter, build_image_manifest_writer
+from .image_prompt_generator import (
+    ImagePromptGenerator,
+    build_image_prompt_generator,
 )
 from .item_models import GenerationResult
 from .master_generator import MasterGenerator
@@ -61,6 +67,9 @@ from .reporting import GenerationReport, ReportWriter, build_report_writer
 ItemGeneratorsBuilder = Callable[..., dict[str, BaseGenerator]]
 #: Factory type for the enrichment-generator registry.
 EnrichmentGeneratorsBuilder = Callable[..., dict[str, BaseEnrichmentGenerator]]
+#: Factory type for the Phase 9.5 AI image-pipeline bundle.
+AIImageBundle = tuple[ImagePromptGenerator, AIImageGenerator, ImageManifestWriter]
+AIImageBuilder = Callable[..., AIImageBundle]
 
 
 class MasterDataPipeline:
@@ -76,6 +85,7 @@ class MasterDataPipeline:
         *,
         item_generators_builder: ItemGeneratorsBuilder | None = None,
         enrichment_generators_builder: EnrichmentGeneratorsBuilder | None = None,
+        ai_images_builder: AIImageBuilder | None = None,
         report_writer: ReportWriter | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -85,6 +95,7 @@ class MasterDataPipeline:
         self._enrichment_generators_builder = (
             enrichment_generators_builder or build_enrichment_generators
         )
+        self._ai_images_builder = ai_images_builder or self._default_ai_images
         self._report_writer = report_writer or build_report_writer(config)
         self._logger = logger or logging.getLogger("keemeds.master_data.pipeline")
 
@@ -111,6 +122,7 @@ class MasterDataPipeline:
             else:
                 self._export_items(items, report)
                 self._generate_and_export_enrichment(items, report)
+                self._generate_ai_images(items, report)
 
         report.finished_at = datetime.now()
         report_paths = self._report_writer.file_paths(output_dir)
@@ -247,4 +259,75 @@ class MasterDataPipeline:
         if export_report.skipped:
             report.add_note(
                 f"{label}: {export_report.skipped} record(s) skipped during export."
+            )
+
+    # ------------------------------------------------------------------ #
+    # Phase 9.5 AI product image generation
+    # ------------------------------------------------------------------ #
+
+    def _default_ai_images(
+        self,
+        config: MasterDataConfig,
+        **_: object,
+    ) -> AIImageBundle:
+        """Build the default Phase 9.5 AI image-pipeline bundle."""
+        ai_config = config.ai_images
+        return (
+            build_image_prompt_generator(ai_config, logger=self._logger),
+            build_ai_image_generator(ai_config, logger=self._logger),
+            build_image_manifest_writer(
+                ai_config, config.export.output_dir, logger=self._logger
+            ),
+        )
+
+    def _generate_ai_images(
+        self,
+        items: GenerationResult,
+        report: GenerationReport,
+    ) -> None:
+        """Generate prompts, product images (optimized + mirrored) and manifest."""
+        prompt_gen, image_gen, manifest_writer = self._ai_images_builder(
+            config=self._config
+        )
+        try:
+            prompt_outcome = prompt_gen.run(items.items)
+        except Exception as exc:
+            report.add_note(f"AI image prompts failed: {exc}")
+            self._logger.error("AI image prompts failed: %s", exc)
+            prompt_outcome = None
+        try:
+            image_outcome = image_gen.run(items.items)
+        except Exception as exc:
+            report.add_note(f"AI image generation failed: {exc}")
+            self._logger.error("AI image generation failed: %s", exc)
+            image_outcome = None
+        try:
+            manifest_outcome = manifest_writer.write(items.items)
+        except Exception as exc:
+            report.add_note(f"AI image manifest failed: {exc}")
+            self._logger.error("AI image manifest failed: %s", exc)
+            manifest_outcome = None
+
+        report.ai_prompts_generated = (
+            prompt_outcome.generated if prompt_outcome else 0
+        )
+        report.ai_images_generated = (
+            image_outcome.images_generated if image_outcome else 0
+        )
+        report.ai_images_optimized = (
+            image_outcome.images_optimized if image_outcome else 0
+        )
+        report.ai_images_skipped = image_outcome.images_skipped if image_outcome else 0
+        report.ai_image_failures = list(image_outcome.failed) if image_outcome else []
+        report.ai_manifest_entries = (
+            manifest_outcome.entries if manifest_outcome else 0
+        )
+        if report.ai_images_generated or report.ai_images_optimized:
+            self._logger.info(
+                "Phase 9.5 AI images: %d generated, %d optimized, %d skipped, "
+                "%d manifest entries",
+                report.ai_images_generated,
+                report.ai_images_optimized,
+                report.ai_images_skipped,
+                report.ai_manifest_entries,
             )

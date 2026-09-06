@@ -19,6 +19,7 @@ python generate_master_data.py --validate
 python generate_master_data.py --summary
 python generate_master_data.py --verify
 python generate_master_data.py --images
+python generate_master_data.py --generate-images
 python generate_master_data.py --import
 python generate_master_data.py --all --import
 """
@@ -41,6 +42,9 @@ if __package__ is None or __package__ == "":
     PACKAGE_PARENT = Path(__file__).resolve().parent.parent
     if str(PACKAGE_PARENT) not in sys.path:
         sys.path.append(str(PACKAGE_PARENT))
+    from master_data.ai_image_generator import (
+        build_ai_image_generator,
+    )
     from master_data.bench_runtime import (
         BenchRuntimeError,
         bootstrap_site,
@@ -59,6 +63,12 @@ if __package__ is None or __package__ == "":
     )
     from master_data.image_generator import (
         build_image_generator,
+    )
+    from master_data.image_manifest import (
+        build_image_manifest_writer,
+    )
+    from master_data.image_prompt_generator import (
+        build_image_prompt_generator,
     )
     from master_data.import_manager import (
         build_importers,
@@ -89,11 +99,14 @@ if __package__ is None or __package__ == "":
         build_verifier,
     )
 else:
+    from .ai_image_generator import build_ai_image_generator
     from .bench_runtime import BenchRuntimeError, bootstrap_site, enter_bench_for_import
     from .config import MasterDataConfig
     from .exporters import export_generation_result, export_records
     from .generators import build_enrichment_generators, build_generators
     from .image_generator import build_image_generator
+    from .image_manifest import build_image_manifest_writer
+    from .image_prompt_generator import build_image_prompt_generator
     from .import_manager import build_importers
     from .import_pipeline import MasterDataImportPipeline
     from .logging_setup import setup_logging
@@ -142,6 +155,15 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Generate the placeholder medicine image and all required item "
         "image files for the current catalog (copies or symbolic links).",
+    )
+    parser.add_argument(
+        "--generate-images",
+        action="store_true",
+        help="Generate the Phase 9.5 AI product-image artifacts: per-medicine "
+        "image prompts under output/image_prompts, an optimized three-image "
+        "gallery per medicine under output/item_images (front, 45-degree, "
+        "side/back), mirrored optimized copies served by ERPNext under "
+        "output/site files, and the reusable image_manifest.json.",
     )
     parser.add_argument(
         "--all",
@@ -416,6 +438,96 @@ def run_images(
     return 0
 
 
+def run_generate_images(
+    config: MasterDataConfig,
+    loader: MasterDataLoader,
+    logger: logging.Logger,
+    stream: TextIO,
+) -> int:
+    """
+    Generate the Phase 9.5 AI product-image artifacts for every medicine.
+
+    Emits one deterministic AI image prompt per medicine (``output/image_prompts``),
+    renders an optimized three-image gallery per medicine (front packshot,
+    45-degree perspective and side/back view) into the canonical
+    ``output/item_images`` directory, mirrors optimized copies into the ERPNext
+    public files directory so the existing ``/files/item_images`` mapping serves
+    them at runtime, and writes the reusable ``output/image_manifest.json``.
+    Returns ``0`` on success and ``1`` when no medicines could be produced.
+    """
+
+    master_data = loader.load()
+    if not master_data.entities:
+        print("No master data could be loaded.", file=stream)
+        return 1
+
+    result = build_generators(config=config, master_data=master_data)[
+        "medicine"
+    ].generate()
+    if result.count == 0:
+        print("No medicines were generated.", file=stream)
+        return 1
+
+    ai_config = config.ai_images
+    print(
+        f"Generating AI product images for {result.count} medicine item(s)",
+        file=stream,
+    )
+    print(
+        f"  Images per item:  {ai_config.images_per_item}",
+        file=stream,
+    )
+    print(
+        f"  Target size:      {ai_config.width}x{ai_config.height} WebP "
+        f"(quality={ai_config.webp_quality})",
+        file=stream,
+    )
+    print(file=stream)
+
+    try:
+        import PIL
+    except ImportError:
+        print(
+            "Pillow is required to render product images but is not available "
+            "in this interpreter. Install it or run via the Bench virtualenv "
+            "(e.g. `<bench>/env/bin/python generate_master_data.py "
+            "--generate-images`).",
+            file=stream,
+        )
+        return 1
+
+    prompt_generator = build_image_prompt_generator(ai_config, logger=logger)
+    image_generator = build_ai_image_generator(ai_config, logger=logger)
+    manifest_writer = build_image_manifest_writer(
+        ai_config, config.export.output_dir, logger=logger
+    )
+    items = result.items
+
+    prompt_outcome = prompt_generator.run(items)
+    image_outcome = image_generator.run(items)
+    manifest_outcome = manifest_writer.write(items)
+
+    print("AI image generation complete", file=stream)
+    print(f"  Prompts generated:     {prompt_outcome.generated}", file=stream)
+    print(f"  Images generated:      {image_outcome.images_generated}", file=stream)
+    print(f"  Images optimized:      {image_outcome.images_optimized}", file=stream)
+    print(f"  Images skipped:        {image_outcome.images_skipped}", file=stream)
+    print(f"  Manifest entries:      {manifest_outcome.entries}", file=stream)
+    print(file=stream)
+    if image_outcome.failed:
+        print("  Failed generations:", file=stream)
+        for failure in image_outcome.failed:
+            print(f"    - {failure}", file=stream)
+        print(file=stream)
+    print("Artifacts:", file=stream)
+    print(f"  Prompts:    {ai_config.prompts_output_dir}", file=stream)
+    print(f"  Gallery:    {ai_config.item_images_output_dir}", file=stream)
+    print(f"  ERPNext:    {ai_config.optimize_output_dir}", file=stream)
+    print(f"  Manifest:   {manifest_outcome.path}", file=stream)
+
+    return 0 if not image_outcome.failed else 1
+
+
 def run_all(
     config: MasterDataConfig,
     loader: MasterDataLoader,
@@ -437,6 +549,13 @@ def run_all(
     print(f"  Generated records: {report.records_generated}", file=stream)
     print(f"  Exported records:  {report.records_exported}", file=stream)
     print(f"  Skipped records:   {report.records_skipped}", file=stream)
+    print(file=stream)
+    print("Phase 9.5 AI product images:", file=stream)
+    print(f"  Prompts generated: {report.ai_prompts_generated}", file=stream)
+    print(f"  Images generated:  {report.ai_images_generated}", file=stream)
+    print(f"  Images optimized:  {report.ai_images_optimized}", file=stream)
+    print(f"  Images skipped:    {report.ai_images_skipped}", file=stream)
+    print(f"  Manifest entries:  {report.ai_manifest_entries}", file=stream)
     print(file=stream)
     for error in report.validation_errors:
         print(f"  [error] {error}", file=stream)
@@ -565,6 +684,7 @@ def run_verify(
     print(f"  Generated records: {report.generated_records}", file=stream)
     print(f"  Expected files:    {report.expected_files}", file=stream)
     print(f"  Found files:       {report.found_files}", file=stream)
+    print(f"  AI manifest items: {report.ai_manifest_items}", file=stream)
     print(file=stream)
     for file_path in report.missing_files:
         print(f"  [missing file] {file_path}", file=stream)
@@ -576,6 +696,26 @@ def run_verify(
         print(f"  [duplicate] {entry}", file=stream)
     for entry in report.missing_images:
         print(f"  [missing image] {entry}", file=stream)
+    for entry in report.missing_prices:
+        print(f"  [missing price] {entry}", file=stream)
+    for entry in report.duplicate_prices:
+        print(f"  [duplicate price] {entry}", file=stream)
+    for entry in report.missing_stock:
+        print(f"  [missing stock] {entry}", file=stream)
+    for entry in report.duplicate_stock:
+        print(f"  [duplicate stock] {entry}", file=stream)
+    for entry in report.invalid_stock_quantities:
+        print(f"  [invalid stock quantity] {entry}", file=stream)
+    for entry in report.missing_warehouses:
+        print(f"  [missing warehouse] {entry}", file=stream)
+    for entry in report.missing_prompts:
+        print(f"  [missing AI prompt] {entry}", file=stream)
+    for entry in report.missing_ai_images:
+        print(f"  [missing AI image] {entry}", file=stream)
+    for entry in report.duplicate_ai_filenames:
+        print(f"  [duplicate AI filename] {entry}", file=stream)
+    for entry in report.invalid_ai_image_dimensions:
+        print(f"  [invalid AI image dimension] {entry}", file=stream)
     for note in report.notes:
         print(f"  [note] {note}", file=stream)
     print(file=stream)
@@ -697,6 +837,9 @@ def main(argv: Sequence[str] | None = None, stream: TextIO = sys.stdout) -> int:
 
     if args.images:
         return run_images(config, logger, stream)
+
+    if args.generate_images:
+        return run_generate_images(config, loader, logger, stream)
 
     if args.verify:
         return run_verify(config, logger, stream)

@@ -1,6 +1,10 @@
 {
+  "ai_manifest_items": 300,
+  "duplicate_ai_filenames": [],
+  "duplicate_prices": [],
   "duplicate_records": [],
-  "duration_seconds": 0.815,
+  "duplicate_stock": [],
+  "duration_seconds": 1.565,
   "expected_files": 12,
   "expected_records": 300,
   "files": [
@@ -89,14 +93,21 @@
       "row_count": 300
     }
   ],
-  "finished_at": "2026-09-03T05:45:47",
+  "finished_at": "2026-09-03T08:18:31",
   "found_files": 12,
   "generated_records": 1586,
+  "invalid_ai_image_dimensions": [],
   "invalid_references": [],
+  "invalid_stock_quantities": [],
+  "missing_ai_images": [],
   "missing_files": [],
   "missing_images": [],
   "missing_masters": [],
+  "missing_prices": [],
+  "missing_prompts": [],
+  "missing_stock": [],
+  "missing_warehouses": [],
   "notes": [],
-  "started_at": "2026-09-03T05:45:46",
+  "started_at": "2026-09-03T08:18:29",
   "status": "PASSED"
 }

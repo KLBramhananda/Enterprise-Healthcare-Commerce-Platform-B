@@ -1,7 +1,13 @@
 {
-  "duration_seconds": 0.619,
+  "ai_image_failures": [],
+  "ai_images_generated": 0,
+  "ai_images_optimized": 0,
+  "ai_images_skipped": 900,
+  "ai_manifest_entries": 300,
+  "ai_prompts_generated": 0,
+  "duration_seconds": 0.643,
   "exported_records": 1586,
-  "finished_at": "2026-09-03T05:45:53",
+  "finished_at": "2026-09-03T08:17:17",
   "generated_files": [
     "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/uoms/UOMs.xlsx",
     "/workspace/development/frappe-bench/apps/keemeds_commerce/keemeds_commerce/master_data/output/item_groups/Item_Groups.xlsx",
@@ -22,7 +28,7 @@
   "generated_records": 1586,
   "notes": [],
   "skipped_records": 0,
-  "started_at": "2026-09-03T05:45:53",
+  "started_at": "2026-09-03T08:17:16",
   "validation_errors": [],
   "validation_warnings": []
 }

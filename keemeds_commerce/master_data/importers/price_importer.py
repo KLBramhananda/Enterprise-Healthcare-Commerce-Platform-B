@@ -26,7 +26,7 @@ class PriceImporter(BaseImporter):
         import_type="insert",
         subdirectory="prices",
         filenames=("Item_Prices.xlsx",),
-        required_columns=("Item Code", "Price List", "Price List Rate"),
+        required_columns=("Item Code", "Price List", "Rate"),
     )
 
     def __init__(

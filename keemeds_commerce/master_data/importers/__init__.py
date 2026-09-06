@@ -32,6 +32,7 @@ from .master_importers import (
     UOMImporter,
 )
 from .price_importer import PriceImporter
+from .stock_entry_executor import StockEntryExecutor
 from .stock_importer import StockImporter
 
 __all__ = [
@@ -48,6 +49,7 @@ __all__ = [
     "ItemImporter",
     "ManufacturerImporter",
     "PriceImporter",
+    "StockEntryExecutor",
     "StockImporter",
     "UOMImporter",
 ]

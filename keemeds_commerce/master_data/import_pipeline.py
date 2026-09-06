@@ -46,6 +46,8 @@ from pathlib import Path
 from .config import MasterDataConfig
 from .import_manager import ImportManager, build_importers
 from .import_report import ImportReport, ImportReportWriter, build_import_report_writer
+from .price_reconciler import PriceReconciler, build_price_reconciler
+from .stock_reconciler import StockReconciler, build_stock_reconciler
 
 #: Factory type for the import-manager registry.
 ImportManagerBuilder = Callable[..., ImportManager]
@@ -62,11 +64,19 @@ class MasterDataImportPipeline:
         *,
         manager_builder: ImportManagerBuilder | None = None,
         report_writer: ImportReportWriter | None = None,
+        price_reconciler: PriceReconciler | None = None,
+        stock_reconciler: StockReconciler | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._config = config
         self._manager_builder = manager_builder or build_importers
         self._report_writer = report_writer or build_import_report_writer(config)
+        self._price_reconciler = price_reconciler or build_price_reconciler(
+            config, logger=logger
+        )
+        self._stock_reconciler = stock_reconciler or build_stock_reconciler(
+            config, logger=logger
+        )
         self._logger = logger or logging.getLogger("keemeds.master_data.import_pipeline")
 
     def run(
@@ -87,6 +97,7 @@ class MasterDataImportPipeline:
 
         report = ImportReport()
 
+        self._reconcile(report)
         fatal = self._preflight(manager, report)
         if fatal:
             report.add_note("Fatal pipeline failure: required import files missing.")
@@ -100,6 +111,34 @@ class MasterDataImportPipeline:
     # ------------------------------------------------------------------ #
     # Orchestration steps
     # ------------------------------------------------------------------ #
+
+    def _reconcile(self, report: ImportReport) -> None:
+        """
+        Prepare the idempotent Item Price and Opening Stock workbooks.
+
+        The reconcilers drop the rows whose ``(Item Code, Price List)`` /
+        ``(Item Code, Warehouse)`` pairing already exists in ERPNext so
+        re-imports skip existing prices and already-posted stock gracefully.
+        They must run before pre-flight so the reconciled workbooks the
+        Importer configs point at always exist for validation.
+        """
+        price_outcome = self._price_reconciler.reconcile()
+        if price_outcome.reconciled_path is not None:
+            report.add_note(
+                f"Item Price reconciled: kept={price_outcome.kept} "
+                f"skipped={price_outcome.skipped} -> {price_outcome.reconciled_path}"
+            )
+        for message in price_outcome.notes:
+            report.add_note(message)
+
+        stock_outcome = self._stock_reconciler.reconcile()
+        if stock_outcome.reconciled_path is not None:
+            report.add_note(
+                f"Opening Stock reconciled: kept={stock_outcome.kept} "
+                f"skipped={stock_outcome.skipped} -> {stock_outcome.reconciled_path}"
+            )
+        for message in stock_outcome.notes:
+            report.add_note(message)
 
     def _preflight(self, manager: ImportManager, report: ImportReport) -> bool:
         """

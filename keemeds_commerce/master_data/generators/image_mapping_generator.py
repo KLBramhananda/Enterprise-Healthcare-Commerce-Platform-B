@@ -82,12 +82,22 @@ class ImageMappingGenerator(BaseEnrichmentGenerator):
 
     def _resolve_image_path(self, slug: str, config: ImageMappingConfig) -> str:
         """Resolve a deterministic image path for an item slug."""
-        candidates = (slug, slug + config.extension)
+        item_code = self._item_code_for(slug)
+        primary = f"{item_code}-1{config.extension}"
+        candidates = (primary, slug, slug + config.extension)
         filename = next(
             (name for name in candidates if name in self._available_files),
             slug + config.placeholder_extension,
         )
         return f"{config.image_url_root.rstrip('/')}/{filename}"
+
+    @staticmethod
+    def _item_code_for(slug: str) -> str:
+        """Derive the item code from its URL slug (e.g. ``med-001`` -> ``MED-001``)."""
+        parts = slug.split("-")
+        if len(parts) == 2 and parts[1].isdigit():
+            return f"{parts[0].upper()}-{parts[1]}"
+        return slug
 
     @staticmethod
     def _slug(item_code: str) -> str:

@@ -72,6 +72,12 @@ class GenerationReport:
     validation_warnings: list[str] = field(default_factory=list)
     validation_errors: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    ai_prompts_generated: int = 0
+    ai_images_generated: int = 0
+    ai_images_optimized: int = 0
+    ai_images_skipped: int = 0
+    ai_image_failures: list[str] = field(default_factory=list)
+    ai_manifest_entries: int = 0
 
     @property
     def duration_seconds(self) -> float:
@@ -169,6 +175,12 @@ class ReportWriter:
             "validation_warnings": list(report.validation_warnings),
             "validation_errors": list(report.validation_errors),
             "notes": list(report.notes),
+            "ai_prompts_generated": report.ai_prompts_generated,
+            "ai_images_generated": report.ai_images_generated,
+            "ai_images_optimized": report.ai_images_optimized,
+            "ai_images_skipped": report.ai_images_skipped,
+            "ai_image_failures": list(report.ai_image_failures),
+            "ai_manifest_entries": report.ai_manifest_entries,
         }
         path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
@@ -246,6 +258,17 @@ class ReportWriter:
         lines.append("Validation errors:")
         for error in report.validation_errors or ["  (none)"]:
             lines.append(f"  - {error}")
+        lines.append("")
+        lines.append("Phase 9.5 AI product images:")
+        lines.append(f"  Prompts generated:  {report.ai_prompts_generated}")
+        lines.append(f"  Images generated:   {report.ai_images_generated}")
+        lines.append(f"  Images optimized:   {report.ai_images_optimized}")
+        lines.append(f"  Images skipped:     {report.ai_images_skipped}")
+        lines.append(f"  Manifest entries:   {report.ai_manifest_entries}")
+        if report.ai_image_failures:
+            lines.append("  Failures:")
+            for failure in report.ai_image_failures:
+                lines.append(f"    - {failure}")
         lines.append("")
         lines.append("Execution notes:")
         for note in report.notes or ["  (none)"]:

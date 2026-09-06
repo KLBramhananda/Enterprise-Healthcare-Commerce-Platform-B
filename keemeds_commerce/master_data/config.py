@@ -170,13 +170,31 @@ REQUIRED_ITEM_ATTRIBUTES: tuple[str, ...] = (
 )
 
 
-#: The ERPNext Item Price import template columns, in export order.
+#: The ERPNext Item Price import template columns, in export order. The rate
+#: column header must match ERPNext's ``Item Price.price_list_rate`` field
+#: label, which is "Rate" - a "Price List Rate" header is not matched by the
+#: Data Import column matching and leaves the required Rate blank.
 ITEM_PRICE_COLUMNS: tuple[ExportColumn, ...] = (
     ExportColumn("Item Code", "item_code"),
     ExportColumn("Price List", "price_list"),
-    ExportColumn("Price List Rate", "rate"),
+    ExportColumn("Rate", "rate"),
     ExportColumn("Currency", "currency"),
 )
+
+#: File name of the idempotent Item Price workbook that the import pipeline
+#: feeds to the :class:`PriceImporter`. The reconciler writes only the rows
+#: whose ``(Item Code, Price List)`` pair is not yet present in ERPNext, so
+#: re-imports skip already-existing prices gracefully. The canonical, full
+#: workbook (``Item_Prices.xlsx``) stays untouched for verification.
+PRICE_RECONCILED_FILENAME = "Item_Prices_reconciled.xlsx"
+
+#: File name of the idempotent Opening Stock workbook that the import pipeline
+#: feeds to the Opening Stock importer. The reconciler writes only the rows
+#: whose ``(Item Code, Warehouse)`` pairing is not yet present in ERPNext, so
+#: re-imports skip already-posted opening stock gracefully and existing
+#: inventory is never duplicated. The canonical, full workbook
+#: (``Opening_Stock.xlsx``) stays untouched for verification.
+STOCK_RECONCILED_FILENAME = "Opening_Stock_reconciled.xlsx"
 
 #: The ERPNext Opening Stock import template columns, in export order.
 OPENING_STOCK_COLUMNS: tuple[ExportColumn, ...] = (
@@ -191,6 +209,34 @@ IMAGE_MAPPING_COLUMNS: tuple[ExportColumn, ...] = (
     ExportColumn("Item Code", "item_code"),
     ExportColumn("Image Path", "image_path"),
 )
+
+#: Sub-directory (relative to the export ``output_dir``) that receives the
+#: generated AI product image prompts (``output/image_prompts/``).
+IMAGE_PROMPTS_SUBDIRECTORY = "image_prompts"
+
+#: Sub-directory (relative to the export ``output_dir``) that receives the
+#: generated, optimized AI product image gallery (``output/item_images/``).
+ITEM_IMAGES_SUBDIRECTORY = "item_images"
+
+#: File name of the reusable product-gallery manifest
+#: (``output/image_manifest.json``) that lists every item's primary and gallery
+#: images for the React gallery / future API integration.
+IMAGE_MANIFEST_FILENAME = "image_manifest.json"
+
+#: Number of product images generated per medicine (front packshot, 45-degree
+#: perspective, side/back view). The first image is the primary ERPNext image.
+ITER_IMAGE_COUNT = 3
+
+#: Default base dimensions (pixels) for the optimized product images. The web
+#: delivery size is centralized here and reused by the optimizer and verifier.
+IMAGE_WIDTH = 1024
+IMAGE_HEIGHT = 1024
+
+#: Default WebP optimization quality (1-100) applied by the image optimizer.
+IMAGE_WEBP_QUALITY = 82
+
+#: Default WebP encoding method (0-6); higher is slower but smaller.
+IMAGE_WEBP_METHOD = 6
 
 #: Attribute names that must be non-blank for an Item Price record to export.
 REQUIRED_PRICE_ATTRIBUTES: tuple[str, ...] = ("item_code", "price_list", "rate", "currency")
@@ -335,6 +381,72 @@ class PriceConfig:
 
 
 @dataclass(frozen=True)
+class PriceVerificationConfig:
+    """
+    Centralized rules for the Phase 8 Item Price verification.
+
+    These rules drive the offline catalog checks that every generated medicine
+    has a corresponding Item Price and that the Item Price workbook contains no
+    duplicate ``(Item Code, Price List)`` pairings.
+
+    Attributes
+    ----------
+    require_price_per_item:
+        When ``True``, every generated item code must be covered by at least
+        one price row; uncovered items are reported as missing before import.
+    detect_duplicates:
+        When ``True``, repeated ``(Item Code, Price List)`` pairings in the
+        price workbook are reported as duplicate prices.
+    item_code_column:
+        Header of the column carrying the item code in the price workbook.
+    price_list_column:
+        Header of the column carrying the price list in the price workbook.
+    """
+
+    require_price_per_item: bool = True
+    detect_duplicates: bool = True
+    item_code_column: str = "Item Code"
+    price_list_column: str = "Price List"
+
+
+@dataclass(frozen=True)
+class PriceReconciliationConfig:
+    """
+    Centralized rules for the Phase 8 idempotent Item Price import.
+
+    Item Price uses a ``hash`` autoname, so the standard Data Import "update"
+    path cannot locate a record without a ``name``/ID column. Phase 8 achieves
+    idempotency before import instead: a reconciler reads the canonical Item
+    Price workbook, drops the rows whose ``(Item Code, Price List)`` pairing is
+    already present in ERPNext, and writes the remaining rows to a reconciled
+    workbook. The existing :class:`PriceImporter` then imports only those rows
+    through the standard Data Import API, so already-existing prices are skipped
+    gracefully and re-runs stay green.
+
+    Attributes
+    ----------
+    reconciled_filename:
+        File name of the reconciled (to-import) Item Price workbook.
+    source_subdirectory:
+        Sub-directory (relative to the export ``output_dir``) that holds the
+        canonical Item Price workbook.
+    canonical_filename:
+        File name of the canonical, full Item Price workbook generated by the
+        exporter.
+    item_code_column:
+        Header of the Item Code column in the workbook.
+    price_list_column:
+        Header of the Price List column in the workbook.
+    """
+
+    reconciled_filename: str = PRICE_RECONCILED_FILENAME
+    source_subdirectory: str = "prices"
+    canonical_filename: str = "Item_Prices.xlsx"
+    item_code_column: str = "Item Code"
+    price_list_column: str = "Price List"
+
+
+@dataclass(frozen=True)
 class StockConfig:
     """
     Generation rules for opening stock (Phase 4 catalog enrichment).
@@ -342,7 +454,10 @@ class StockConfig:
     Attributes
     ----------
     warehouses:
-        Warehouses cycled through when assigning opening stock records.
+        Warehouses cycled through when assigning opening stock records. These
+        are the canonical (config/source-level) warehouse names; at import time
+        each is resolved to an existing ERPNext Warehouse (exact match, else by
+        ``warehouse_name``) still leaving this configuration unchanged.
     quantity_min:
         Lower bound (inclusive) of the deterministic opening quantity.
     quantity_max:
@@ -352,6 +467,116 @@ class StockConfig:
     warehouses: tuple[str, ...] = ("Finished Goods",)
     quantity_min: int = 10
     quantity_max: int = 100
+
+
+@dataclass(frozen=True)
+class StockVerificationConfig:
+    """
+    Centralized rules for the Phase 9 Opening Stock verification.
+
+    These rules drive the offline catalog checks that every generated medicine
+    has a corresponding Opening Stock record, that the Opening Stock workbook
+    contains no duplicate ``(Item Code, Warehouse)`` pairings, that every
+    configured warehouse exists, and that all opening quantities are positive.
+
+    Attributes
+    ----------
+    require_stock_per_item:
+        When ``True``, every generated item code must be covered by at least one
+        Opening Stock row; uncovered items are reported as missing stock.
+    detect_duplicates:
+        When ``True``, repeated ``(Item Code, Warehouse)`` pairings in the
+        Opening Stock workbook are reported as duplicate stock.
+    require_positive_quantity:
+        When ``True``, Opening Stock rows with a non-positive quantity are
+        reported as invalid stock quantities.
+    item_code_column:
+        Header of the column carrying the item code in the Opening Stock
+        workbook.
+    warehouse_column:
+        Header of the column carrying the warehouse in the Opening Stock
+        workbook.
+    quantity_column:
+        Header of the column carrying the opening quantity in the workbook.
+    """
+
+    require_stock_per_item: bool = True
+    detect_duplicates: bool = True
+    require_positive_quantity: bool = True
+    item_code_column: str = "Item Code"
+    warehouse_column: str = "Warehouse"
+    quantity_column: str = "Opening Quantity"
+
+
+@dataclass(frozen=True)
+class StockReconciliationConfig:
+    """
+    Centralized rules for the Phase 9 idempotent Opening Stock import.
+
+    Opening Stock cannot be imported through the standard Data Import API as a
+    ``Stock Ledger Entry`` (SLE is a ledger, not a master, and its autoname is
+    not field-based). Phase 9 achieves idempotency before import instead, and
+    posts via Stock Entry: a reconciler reads the canonical Opening Stock
+    workbook, drops the rows whose ``(Item Code, Warehouse)`` pairing already
+    has stock in ERPNext, and writes the remaining rows to a reconciled
+    workbook. The importer then posts only those rows as ``Stock Entry``
+    documents of type "Material Receipt", so already-posted stock is skipped
+    gracefully and re-runs stay green.
+
+    Attributes
+    ----------
+    reconciled_filename:
+        File name of the reconciled (to-import) Opening Stock workbook.
+    source_subdirectory:
+        Sub-directory (relative to the export ``output_dir``) that holds the
+        canonical Opening Stock workbook.
+    canonical_filename:
+        File name of the canonical, full Opening Stock workbook generated by
+        the exporter.
+    item_code_column:
+        Header of the Item Code column in the workbook.
+    warehouse_column:
+        Header of the Warehouse column in the workbook.
+    """
+
+    reconciled_filename: str = STOCK_RECONCILED_FILENAME
+    source_subdirectory: str = "stock"
+    canonical_filename: str = "Opening_Stock.xlsx"
+    item_code_column: str = "Item Code"
+    warehouse_column: str = "Warehouse"
+
+
+@dataclass(frozen=True)
+class StockPostingConfig:
+    """
+    Centralized rules for how Opening Stock is posted into ERPNext (Phase 9).
+
+    Opening Stock is posted as a standard ``Stock Entry`` of type "Material
+    Receipt" through the normal ERPNext inventory workflow
+    (``frappe.get_doc(...).insert().submit()``), so ERPNext validation is never
+    bypassed. The configured warehouse names from :class:`StockConfig` are each
+    resolved to an existing ERPNext Warehouse at import time.
+
+    Attributes
+    ----------
+    stock_entry_type:
+        The ``Stock Entry Type`` of the generated documents. Must be a value
+        ERPNext supports; ERPNext's inventory validation requires the document
+        purpose to be set explicitly for the source/target warehouse rules.
+    purpose:
+        The ``Stock Entry.purpose`` value. For receiving opening stock this is
+        "Material Receipt" so ERPNext treats each item as a target-warehouse
+        receipt and does not demand a source warehouse.
+    resolve_warehouses:
+        When ``True``, the configured warehouse name is resolved to an existing
+        ERPNext Warehouse at import time (exact match first, else by
+        ``warehouse_name``). When ``False`` the configured name is used verbatim.
+    """
+
+    stock_entry_type: str = "Material Receipt"
+    purpose: str = "Material Receipt"
+    resolve_warehouses: bool = True
+
 
 
 @dataclass(frozen=True)
@@ -371,7 +596,7 @@ class ImageMappingConfig:
         Extension used for deterministic placeholder image paths.
     """
 
-    image_dir: Path = PACKAGE_DIR / "item_images"
+    image_dir: Path = PACKAGE_DIR / "output" / ITEM_IMAGES_SUBDIRECTORY
     image_url_root: str = "/files/item_images"
     extension: str = ".webp"
     placeholder_extension: str = ".webp"
@@ -430,6 +655,80 @@ class ImageGeneratorConfig:
     def placeholder_source(self) -> Path:
         """The placeholder file used as the source for item image copies."""
         return self.output_dir / self.svg_filename
+
+
+@dataclass(frozen=True)
+class AIImageConfig:
+    """
+    Centralized rules for the Phase 9.5 AI product image generation pipeline.
+
+    For every medicine the pipeline emits a deterministic, per-medicine AI image
+    prompt under ``output/image_prompts/``, renders ``images_per_item`` product
+    images into ``output/item_images/`` (front packshot, 45-degree perspective
+    and side/back view), optimizes them to WebP at the configured dimensions and
+    quality, mirrors the optimized gallery into the ERPNext site's public file
+    directory so the existing ``/files/item_images`` image-mapping pipeline can
+    serve them, and writes a reusable ``output/image_manifest.json``.
+
+    Attributes
+    ----------
+    name:
+        Human-readable display name of the generator pipeline.
+    extension:
+        Output image file extension (including the leading dot), ``".webp"``.
+    prompts_output_dir:
+        Directory that receives the per-medicine prompt text files. Defaults to
+        ``output/image_prompts/`` under the export output directory.
+    item_images_output_dir:
+        Directory that receives the optimized product-image gallery. Defaults to
+        ``output/item_images/`` under the export output directory.
+    optimize_output_dir:
+        Directory that receives the optimized, ERPNext-served copies of the
+        product-image gallery. Defaults to the site's public ``files/item_images``
+        directory so the existing image-mapping ``/files/item_images`` URLs resolve.
+    images_per_item:
+        Number of product images generated per medicine.
+    width / height:
+        Target pixel dimensions of the optimized output images.
+    webp_quality:
+        WebP compression quality (1-100) applied by the optimizer.
+    webp_method:
+        WebP encoding method (0-6); higher is slower but yields smaller files.
+    profile_names:
+        Ordered human-readable view labels for each generated image, defaulting
+        to three: ``front``, ``angle`` and ``side``.
+    prompt_extension:
+        File suffix (including the leading dot) of the per-medicine prompt files.
+    """
+
+    name: str = "AI Product Images"
+    extension: str = ".webp"
+    prompts_output_dir: Path | None = None
+    item_images_output_dir: Path | None = None
+    optimize_output_dir: Path = field(default_factory=default_image_output_dir)
+    images_per_item: int = ITER_IMAGE_COUNT
+    width: int = IMAGE_WIDTH
+    height: int = IMAGE_HEIGHT
+    webp_quality: int = IMAGE_WEBP_QUALITY
+    webp_method: int = IMAGE_WEBP_METHOD
+    profile_names: tuple[str, ...] = ("front", "angle", "side")
+    prompt_extension: str = ".txt"
+
+    def __post_init__(self) -> None:
+        # Frozen dataclass: replace unset defaults that depend on output_dir.
+        from dataclasses import fields
+
+        for fname in ("prompts_output_dir", "item_images_output_dir"):
+            value = getattr(self, fname)
+            if value is None:
+                object.__setattr__(
+                    self,
+                    fname,
+                    PACKAGE_DIR / "output" / {
+                        "prompts_output_dir": IMAGE_PROMPTS_SUBDIRECTORY,
+                        "item_images_output_dir": ITEM_IMAGES_SUBDIRECTORY,
+                    }[fname],
+                )
 
 
 @dataclass(frozen=True)
@@ -630,16 +929,16 @@ class ImportConfig:
                 doctype="Item Price",
                 import_type="insert",
                 subdirectory="prices",
-                filenames=("Item_Prices.xlsx",),
-                required_columns=("Item Code", "Price List", "Price List Rate"),
+                filenames=(PRICE_RECONCILED_FILENAME,),
+                required_columns=("Item Code", "Price List", "Rate"),
             ),
             ImporterConfig(
                 key="stock",
                 name="Opening Stock",
-                doctype="Stock Ledger Entry",
+                doctype="Stock Entry",
                 import_type="insert",
                 subdirectory="stock",
-                filenames=("Opening_Stock.xlsx",),
+                filenames=(STOCK_RECONCILED_FILENAME,),
                 required_columns=("Item Code", "Warehouse", "Opening Quantity"),
             ),
             ImporterConfig(
@@ -784,16 +1083,28 @@ class MasterDataConfig:
         Generation rules for the Medicine generator.
     price:
         Generation rules for the Item Price generator.
+    price_verification:
+        Rules for the Phase 8 Item Price catalog verification.
+    price_reconciliation:
+        Rules for the Phase 8 idempotent Item Price import.
     stock:
         Generation rules for the Opening Stock generator.
+    stock_verification:
+        Rules for the Phase 9 Opening Stock catalog verification.
+    stock_reconciliation:
+        Rules for the Phase 9 idempotent Opening Stock import.
+    stock_posting:
+        Rules for how Opening Stock is posted into ERPNext (Phase 9).
     image_mapping:
         Generation rules for the Image Mapping generator.
     image_generator:
         Generation rules for the Phase 7 placeholder image generator.
+    ai_images:
+        Generation rules for the Phase 9.5 AI product image pipeline
+        (prompts, per-item gallery, WebP optimization, manifest).
     export:
         Export rules for the Excel exporter.
     reports:
-        Rules for writing the Phase 5 execution reports.
         Rules for writing the Phase 5 execution reports.
     price_export:
         Export rules for the Item Price workbook.
@@ -827,9 +1138,15 @@ class MasterDataConfig:
     entities: tuple[EntityConfig, ...] = field(default_factory=default_entities)
     medicine: MedicineConfig = MedicineConfig()
     price: PriceConfig = PriceConfig()
+    price_verification: PriceVerificationConfig = PriceVerificationConfig()
+    price_reconciliation: PriceReconciliationConfig = PriceReconciliationConfig()
     stock: StockConfig = StockConfig()
+    stock_verification: StockVerificationConfig = StockVerificationConfig()
+    stock_reconciliation: StockReconciliationConfig = StockReconciliationConfig()
+    stock_posting: StockPostingConfig = StockPostingConfig()
     image_mapping: ImageMappingConfig = ImageMappingConfig()
     image_generator: ImageGeneratorConfig = ImageGeneratorConfig()
+    ai_images: AIImageConfig = AIImageConfig()
     export: ExportConfig = ExportConfig()
     reports: ReportConfig = ReportConfig()
     import_config: ImportConfig = ImportConfig()

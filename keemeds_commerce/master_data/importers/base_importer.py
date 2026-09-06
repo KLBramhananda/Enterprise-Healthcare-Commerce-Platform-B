@@ -152,6 +152,16 @@ class FrappeImportExecutor(ImportExecutor):
         """Run the standard Data Import flow and read back real row counts."""
         import_type = _normalize_import_type(import_type)
 
+        # A header-only template (no data rows) cannot be imported - ERPNext's
+        # Data Import validate() rejects it with "Header and atleast one row".
+        # This is the normal, graceful state on an idempotent re-run after
+        # reconciliation has already kept every existing row. Short-circuit as a
+        # clean no-op (imported=0, failed=0) instead of raising and flagging the
+        # importer as failed, so the report records an explicit "nothing to
+        # import" file entry rather than an error.
+        if _count_data_rows(file_path) == 0:
+            return ImportOutcome(imported=0, updated=0, skipped=0, failed=0)
+
         # Upload the generated workbook into Frappe's File manager (the same
         # step the ERPNext Data Import UI performs) so the Importer can read it.
         # A local path cannot be consumed directly by the Importer because it
@@ -220,6 +230,23 @@ def _normalize_import_type(import_type: str) -> str:
     if lowered == "update":
         return "Update Existing Records"
     return import_type
+
+
+def _count_data_rows(file_path: Path) -> int:
+    """Return the number of data rows (excluding the header) in a workbook."""
+    workbook = load_workbook(file_path, read_only=True)
+    try:
+        sheet = workbook.active
+        count = 0
+        for i, _row in enumerate(sheet.iter_rows(values_only=True)):
+            if i == 0:
+                continue
+            count += 1
+            if count > 0:
+                break
+        return count
+    finally:
+        workbook.close()
 
 
 def _upload_to_file_doc(frappe, file_path: Path) -> str:
