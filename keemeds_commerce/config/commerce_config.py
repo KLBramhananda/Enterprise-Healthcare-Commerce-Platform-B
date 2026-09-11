@@ -54,6 +54,10 @@ payment_company / payment_mode_of_payment / payment_paid_from_account /
 payment_paid_to_account:
     ERPNext accounting targets for the Payment Entry created after a successful
     verification. Defaults mirror the site's Chart of Accounts and seed data.
+payment_method_mode_map:
+    Maps gateway-level ``payment_method`` values (e.g. "upi", "cod") to
+    ERPNext ``Mode of Payment`` names so the correct accounting mode is
+    used on the Payment Entry.
 """
 
 from __future__ import annotations
@@ -110,7 +114,21 @@ class CommerceConfig:
     #: customer "Receive" entry ERPNext treats ``paid_from`` as the party
     #: (receivable) account and ``paid_to`` as the company cash/bank account.
     payment_company: str = "HG Infotech"
+    #: Default ERPNext mode of payment when no mapping exists for the gateway
+    #: payment method. Kept for backward compatibility.
     payment_mode_of_payment: str = "Cash"
+    #: Mapping from gateway-level ``payment_method`` values (e.g. "upi",
+    #: "card", "cod") to ERPNext ``Mode of Payment`` names. The gateway
+    #: method is selected by the customer at checkout; the resolved mode is
+    #: written onto the Payment Entry and Sales Order.
+    payment_method_mode_map: dict[str, str] = field(default_factory=lambda: {
+        "upi": "UPI",
+        "cod": "Cash",
+        "cash": "Cash",
+        "card": "Card",
+        "netbanking": "Net Banking",
+        "wallet": "Wallet",
+    })
     #: Customer's receivable account debited by a received payment.
     payment_paid_from_account: str = "Debtors - HG"
     #: Company cash/bank account credited by a received payment.

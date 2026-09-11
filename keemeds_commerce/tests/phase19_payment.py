@@ -573,12 +573,63 @@ def test_verify_payment_success():
     refs = [(r.reference_doctype, r.reference_name) for r in pe.references]
     assert ("Sales Order", so) in refs
     assert pe.paid_from == "Debtors - HG" and pe.paid_to == "Cash - HG"
+    assert pe.mode_of_payment == "Cash", "default (no method) should resolve to Cash"
     assert _entry_count_for(so) == 1, "exactly one Payment Entry reference for the order"
 
     ps_doc = frappe.get_doc("Payment Session", ps.session)
     assert ps_doc.status == "Paid"
     assert ps_doc.payment_entry == comp.payment_entry
     assert ps_doc.transaction_id == comp.transaction_id
+
+
+def test_upi_payment_creates_upi_mode():
+    so = _draft_order(U1)
+    svc = _svc(U1)
+    ps = svc.create_payment(sales_order=so, method="upi")
+    assert ps.payment_method == "upi"
+
+    comp = svc.verify_payment(
+        sales_order=so, session=ps.session, amount=ps.amount,
+        signature=ps.signature, method="upi",
+    )
+    assert comp.success is True and comp.status == "Paid"
+
+    pe = frappe.get_doc("Payment Entry", comp.payment_entry)
+    assert pe.mode_of_payment == "UPI", "UPI payment must produce mode_of_payment = UPI"
+
+    so_doc = frappe.get_doc("Sales Order", so)
+    assert so_doc.payment_method == "upi", "Sales Order must store the gateway payment_method"
+
+
+def test_cod_payment_creates_cash_mode():
+    so = _draft_order(U1)
+    svc = _svc(U1)
+    ps = svc.create_payment(sales_order=so, method="cod")
+    assert ps.payment_method == "cod"
+
+    comp = svc.verify_payment(
+        sales_order=so, session=ps.session, amount=ps.amount,
+        signature=ps.signature, method="cod",
+    )
+    assert comp.success is True and comp.status == "Paid"
+
+    pe = frappe.get_doc("Payment Entry", comp.payment_entry)
+    assert pe.mode_of_payment == "Cash", "COD payment must produce mode_of_payment = Cash"
+
+    so_doc = frappe.get_doc("Sales Order", so)
+    assert so_doc.payment_method == "cod", "Sales Order must store the gateway payment_method"
+
+
+def test_unknown_method_falls_back_to_default():
+    so = _draft_order(U1)
+    svc = _svc(U1)
+    ps = svc.create_payment(sales_order=so, method="bitcoin")
+    comp = svc.verify_payment(
+        sales_order=so, session=ps.session, amount=ps.amount,
+        signature=ps.signature, method="bitcoin",
+    )
+    pe = frappe.get_doc("Payment Entry", comp.payment_entry)
+    assert pe.mode_of_payment == "Cash", "unknown method falls back to default Cash"
 
 
 def test_verify_duplicate_rejected():

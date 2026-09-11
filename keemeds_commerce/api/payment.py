@@ -70,6 +70,7 @@ def create_payment() -> dict[str, Any]:
         billing_address_name=checkout_params.optional_address_name(
             args, "billing_address_name"
         ),
+        method=payment_params.optional_payment_method(args) or None,
     )
     return success_response(
         message="Payment session created successfully.",
@@ -88,7 +89,7 @@ def verify_payment() -> dict[str, Any]:
         session=payment_params.session_name(args) if _has(args, "session") else None,
         amount=payment_params.amount(args),
         signature=payment_params.signature(args),
-        method=payment_params.optional_reason(args, "method") or None,
+        method=payment_params.optional_payment_method(args) or None,
     )
     return success_response(
         message="Payment verified and completed successfully.",
@@ -106,6 +107,7 @@ def complete_payment() -> dict[str, Any]:
         sales_order=payment_params.order_name(args) if _has(args, "sales_order") else None,
         session=payment_params.session_name(args) if _has(args, "session") else None,
         transaction_id=payment_params.optional_reason(args, "transaction_id") or None,
+        method=payment_params.optional_payment_method(args) or None,
     )
     return success_response(
         message="Payment completed successfully.",
@@ -127,6 +129,7 @@ def retry_payment() -> dict[str, Any]:
         billing_address_name=checkout_params.optional_address_name(
             args, "billing_address_name"
         ),
+        method=payment_params.optional_payment_method(args) or None,
     )
     return success_response(
         message="Payment retry session created successfully.",

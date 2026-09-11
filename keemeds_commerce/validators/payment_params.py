@@ -25,6 +25,7 @@ __all__ = [
     "amount",
     "signature",
     "optional_reason",
+    "optional_payment_method",
 ]
 
 
@@ -81,3 +82,16 @@ def optional_reason(args: dict[str, Any], field: str = "reason") -> str:
     if not isinstance(value, str):
         raise_validation_error(_("{0} must be text.").format(field))
     return value.strip()
+
+
+def optional_payment_method(args: dict[str, Any], field: str = "payment_method") -> str:
+    """
+    Return an optional gateway-level payment method (e.g. "upi", "cod", "card"),
+    trimmed and lowercased.
+    """
+    value = args.get(field)
+    if value is None or value == "":
+        return ""
+    if not isinstance(value, str):
+        raise_validation_error(_("{0} must be text.").format(field))
+    return value.strip().lower()

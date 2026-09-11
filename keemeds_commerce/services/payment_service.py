@@ -115,6 +115,7 @@ class PaymentService:
         sales_order: str,
         shipping_address_name: str | None = None,
         billing_address_name: str | None = None,
+        method: str | None = None,
     ) -> PaymentSessionDTO:
         """
         Create (or replay) a gateway-ready payment session for a Draft Sales
@@ -148,7 +149,7 @@ class PaymentService:
                     "sales_order": so.name,
                     "status": "Pending",
                     "gateway": (self._config.payment_gateway or "TEST").upper(),
-                    "payment_method": _GATEWAY_METHOD,
+                    "payment_method": method or _GATEWAY_METHOD,
                     "amount": amount,
                     "currency": currency,
                     "amount_in_paise": int(round(amount * 100)),
@@ -265,6 +266,7 @@ class PaymentService:
         sales_order: str,
         shipping_address_name: str | None = None,
         billing_address_name: str | None = None,
+        method: str | None = None,
     ) -> PaymentSessionDTO:
         """
         Open a fresh payment session for the existing Draft Sales Order.
@@ -296,7 +298,7 @@ class PaymentService:
                     "sales_order": so.name,
                     "status": "Pending",
                     "gateway": (self._config.payment_gateway or "TEST").upper(),
-                    "payment_method": _GATEWAY_METHOD,
+                    "payment_method": method or _GATEWAY_METHOD,
                     "amount": amount,
                     "currency": currency,
                     "amount_in_paise": int(round(amount * 100)),
@@ -522,7 +524,8 @@ class PaymentService:
         if session_doc.payment_entry:
             return self._completion_dto(session_doc)
         transaction_id = transaction_id or session_doc.transaction_id or ""
-        pe_name = self._create_payment_entry(session_doc, transaction_id)
+        payment_method = session_doc.payment_method or ""
+        pe_name = self._create_payment_entry(session_doc, transaction_id, payment_method)
         session_doc.transaction_id = transaction_id
         session_doc.payment_entry = pe_name
         session_doc.status = "Paid"
@@ -530,6 +533,10 @@ class PaymentService:
         frappe.db.set_value(
             "Sales Order", session_doc.sales_order, "payment_status", "Paid"
         )
+        if payment_method:
+            frappe.db.set_value(
+                "Sales Order", session_doc.sales_order, "payment_method", payment_method
+            )
         frappe.db.commit()
         logger.info(
             "Payment Entry %s submitted for order %s (session %s)",
@@ -539,61 +546,92 @@ class PaymentService:
         )
         return self._completion_dto(session_doc)
 
-    def _create_payment_entry(self, session_doc, transaction_id: str) -> str:
+    def _create_payment_entry(self, session_doc, transaction_id: str, payment_method: str = "") -> str:
         """
         Build and submit an ERPNext Payment Entry referencing the Sales Order.
         The Draft Sales Order is submitted first because ERPNext only allows
         Payment Entry allocation against a submitted Sales Order; the standard
         accounting flow (controller, GL posting, advance_paid update) is used.
         No commit — the caller commits the whole transaction atomically.
+
+        ERPNext's ``Payment Entry.validate`` → ``set_missing_values`` →
+        ``get_account_details`` calls ``frappe.has_permission("Payment Entry",
+        throw=True)`` which is a **global** permission check that ignores the
+        document's ``flags.ignore_permissions``.  A Website User therefore
+        cannot drive this code path without temporary elevation to
+        Administrator.
+
+        ``frappe.set_user()`` must be wrapped with full session-state
+        preservation: the function overwrites ``session.sid`` with the
+        plain username and replaces ``session.data`` (containing the CSRF
+        token, session_ip, session_expiry, …) with an empty ``_dict()``.
+        When ``Session.update()`` runs in ``after_response`` it would persist
+        that corrupted state to Redis, causing the *next* request to fail
+        session-resume and fall back to Guest — producing 403 FORBIDDEN on
+        every authenticated endpoint.  We therefore snapshot the session
+        dict and ``form_dict`` before elevation and restore them in the
+        ``finally`` block.
         """
         so = frappe.get_doc("Sales Order", session_doc.sales_order)
         amount = round(float(session_doc.amount or 0.0), 2)
         buy_order = frappe.get_doc("Sales Order", so.name)
+
+        mode_of_payment = self._config.payment_method_mode_map.get(
+            (payment_method or "").lower(),
+            self._config.payment_mode_of_payment,
+        )
+
+        pe = frappe.get_doc(
+            {
+                "doctype": "Payment Entry",
+                "payment_type": "Receive",
+                "posting_date": today(),
+                "company": self._config.payment_company or so.company,
+                "mode_of_payment": mode_of_payment,
+                "party_type": "Customer",
+                "party": so.customer,
+                "paid_from": self._config.payment_paid_from_account,
+                "paid_to": self._config.payment_paid_to_account,
+                "paid_amount": amount,
+                "received_amount": amount,
+                "source_exchange_rate": 1.0,
+                "target_exchange_rate": 1.0,
+                "reference_no": transaction_id or session_doc.idempotency_key,
+                "reference_date": today(),
+                "references": [
+                    {
+                        "reference_doctype": "Sales Order",
+                        "reference_name": so.name,
+                        "total_amount": round(float(so.grand_total or 0.0), 2),
+                        "allocated_amount": amount,
+                    }
+                ],
+            }
+        )
+        pe.flags.ignore_permissions = True
+
         previous_user = frappe.session.user
-        elevated = previous_user != "Administrator"
-        try:
-            if elevated:
-                frappe.set_user("Administrator")
+        if previous_user == "Administrator":
             if buy_order.docstatus == 0:
                 buy_order.flags.ignore_permissions = True
                 buy_order.submit()
-            pe = frappe.get_doc(
-                {
-                    "doctype": "Payment Entry",
-                    "payment_type": "Receive",
-                    "posting_date": today(),
-                    "company": self._config.payment_company or so.company,
-                    "mode_of_payment": self._config.payment_mode_of_payment,
-                    "party_type": "Customer",
-                    "party": so.customer,
-                    "paid_from": self._config.payment_paid_from_account,
-                    "paid_to": self._config.payment_paid_to_account,
-                    "paid_amount": amount,
-                    "received_amount": amount,
-                    "source_exchange_rate": 1.0,
-                    "target_exchange_rate": 1.0,
-                    "reference_no": transaction_id or session_doc.idempotency_key,
-                    "reference_date": today(),
-                    "references": [
-                        {
-                            "reference_doctype": "Sales Order",
-                            "reference_name": so.name,
-                            "total_amount": round(float(so.grand_total or 0.0), 2),
-                            "allocated_amount": amount,
-                        }
-                    ],
-                }
-            )
-            pe.flags.ignore_permissions = True
             pe.insert()
             pe.submit()
-        except Exception:
-            frappe.db.rollback()
-            raise
-        finally:
-            if elevated:
+        else:
+            saved_session = frappe.local.session.copy()
+            saved_form_dict = frappe.local.form_dict
+            try:
+                frappe.set_user("Administrator")
+                if buy_order.docstatus == 0:
+                    buy_order.flags.ignore_permissions = True
+                    buy_order.submit()
+                pe.insert()
+                pe.submit()
+            finally:
                 frappe.set_user(previous_user)
+                frappe.local.session.update(saved_session)
+                frappe.local.form_dict = saved_form_dict
+
         return pe.name
 
     # ------------------------------------------------------------------ #
@@ -889,28 +927,45 @@ def _record_webhook(event_id: str, session_name: str, status: str, payload: dict
 
 def _ensure_payment_schema() -> None:
     """
-    Ensure the Sales Order ``payment_status`` Custom Field exists (idempotent).
-    This reuses the standard ERPNext Custom Field mechanism so order management
-    can report a payment status without any custom Payment DocType.
+    Ensure the Sales Order ``payment_status`` and ``payment_method`` Custom
+    Fields exist (idempotent).  Reuses the standard ERPNext Custom Field
+    mechanism so order management can report a payment status and method
+    without any custom DocType.
     """
-    if frappe.db.exists(
+    if not frappe.db.exists(
         "Custom Field", {"dt": "Sales Order", "fieldname": "payment_status"}
     ):
-        return
-    frappe.get_doc(
-        {
-            "doctype": "Custom Field",
-            "dt": "Sales Order",
-            "fieldname": "payment_status",
-            "label": "Payment Status",
-            "fieldtype": "Select",
-            "options": "Pending\nProcessing\nPaid\nFailed\nCancelled",
-            "default": "Pending",
-            "insert_after": "grand_total",
-        }
-    ).insert(ignore_permissions=True, ignore_mandatory=True)
-    frappe.clear_cache(doctype="Sales Order")
-    frappe.db.commit()
+        frappe.get_doc(
+            {
+                "doctype": "Custom Field",
+                "dt": "Sales Order",
+                "fieldname": "payment_status",
+                "label": "Payment Status",
+                "fieldtype": "Select",
+                "options": "Pending\nProcessing\nPaid\nFailed\nCancelled",
+                "default": "Pending",
+                "insert_after": "grand_total",
+            }
+        ).insert(ignore_permissions=True, ignore_mandatory=True)
+        frappe.clear_cache(doctype="Sales Order")
+        frappe.db.commit()
+
+    if not frappe.db.exists(
+        "Custom Field", {"dt": "Sales Order", "fieldname": "payment_method"}
+    ):
+        frappe.get_doc(
+            {
+                "doctype": "Custom Field",
+                "dt": "Sales Order",
+                "fieldname": "payment_method",
+                "label": "Payment Method",
+                "fieldtype": "Data",
+                "read_only": 1,
+                "insert_after": "payment_status",
+            }
+        ).insert(ignore_permissions=True, ignore_mandatory=True)
+        frappe.clear_cache(doctype="Sales Order")
+        frappe.db.commit()
 
 
 def webhook_signature(payload: dict, gateway: PaymentGatewayAdapter | None = None) -> str:
